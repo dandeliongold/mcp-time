@@ -1,13 +1,10 @@
 {
   "name": "mcp-time",
-  "version": "1.0.0",
+  "version": "0.1.1",
   "description": "A simple MCP server for getting current time",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "mcp-time": "mcp-time"
   },
   "keywords": [
     "mcp",
