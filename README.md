@@ -38,4 +38,4 @@ The server will start on port 3200 by default.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+MIT License - see [LICENSE](LICENSE.txt) for details
