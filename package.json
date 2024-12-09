@@ -1,0 +1,28 @@
+{
+  "name": "mcp-time",
+  "version": "1.0.0",
+  "description": "A simple MCP server for getting current time",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "time",
+    "claude",
+    "anthropic"
+  ],
+  "author": "zepar",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/mcp": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  }
+}
