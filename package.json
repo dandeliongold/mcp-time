@@ -1,8 +1,11 @@
 {
   "name": "@zeparhyfar/mcp-time",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Simple MCP server for getting current time",
   "main": "dist/index.js",
+  "bin": {
+    "mcp-time": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build"
