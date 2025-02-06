@@ -1,41 +1,30 @@
 {
-  "name": "@zeparhyfar/mcp-time",
-  "version": "0.1.7",
-  "description": "Simple MCP server for getting current time",
-  "main": "dist/index.js",
-  "bin": {
-    "mcp-time": "dist/index.js"
-  },
+  "name": "mcp-time",
+  "version": "1.0.0",
+  "description": "MCP server for getting current time",
+  "main": "dist/server.js",
+  "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && chmod +x dist/server.js",
     "prepare": "npm run build"
   },
   "keywords": [
     "mcp",
     "time",
-    "claude",
-    "anthropic"
+    "server"
   ],
   "author": "zepar",
   "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.0.1",
+    "zod-to-json-schema": "^3.23.5"
+  },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/ZeparHyfar/mcp-time.git"
-  },
-  "bugs": {
-    "url": "https://github.com/ZeparHyfar/mcp-time/issues"
-  },
-  "homepage": "https://github.com/ZeparHyfar/mcp-time#readme"
+  "bin": {
+    "mcp-time": "dist/server.js"
+  }
 }
