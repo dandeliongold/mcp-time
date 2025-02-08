@@ -67,7 +67,6 @@ export function handleJsonRpcMessage(message: JsonRpcRequest): JsonRpcResponse {
 
 // Only set up server if this is the main module
 if (import.meta.url === `file://${process.argv[1]}`) {
-  // メインのサーバー処理
   process.stdin.setEncoding('utf-8');
   let buffer = '';
 
@@ -100,7 +99,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(0);
   });
 
-  // エラーハンドリング
   process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
     process.exit(1);
