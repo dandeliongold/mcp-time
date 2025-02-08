@@ -1,12 +1,12 @@
 # mcp-time
 
-A simple MCP server for getting current time in various formats. This server is designed to work with Claude desktop app on macOS.
+A simple MCP server for getting current time in various formats. This server works with Claude desktop app on both Windows and macOS.
 
 ## Features
 
-- Get current time in YYYYMMDDHHMMSS format
-- Returns time in JST (Japan Standard Time)
-- Utilizes macOS system date command
+- Get current time in YYYY-MM-DD HH:MM:SS format
+- Cross-platform support for Windows and macOS
+- Uses native system commands (PowerShell on Windows, date command on macOS)
 
 ## Installation
 
