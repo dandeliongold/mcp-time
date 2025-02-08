@@ -1,28 +1,73 @@
-# mcp-time
+# @dandeliongold/mcp-time
 
-A simple MCP server for getting current time in various formats. This server works with Claude desktop app on both Windows and macOS.
+An MCP server for getting current time in ISO format (YYYY-MM-DD HH:mm:ss) using JavaScript Date. This server works with the Claude desktop app on both Windows and macOS.
+
+## Components
+
+### Tools
+
+1. `getCurrentTime`
+   - Returns the current time in ISO format
+   - No input parameters required
+   - Returns: 
+     ```json
+     {
+       "time": "2024-02-08 11:04:33",
+       "success": true
+     }
+     ```
+   
+   Example JSON-RPC request:
+   ```json
+   {
+     "jsonrpc": "2.0",
+     "id": 1,
+     "method": "getCurrentTime"
+   }
+   ```
+
+   Example JSON-RPC response:
+   ```json
+   {
+     "jsonrpc": "2.0",
+     "id": 1,
+     "result": {
+       "time": "2024-02-08 11:04:33",
+       "success": true
+     }
+   }
+   ```
 
 ## Features
 
-- Get current time in YYYY-MM-DD HH:MM:SS format
+- Get current time in YYYY-MM-DD HH:mm:ss format
 - Cross-platform support for Windows and macOS
-- Uses native system commands (PowerShell on Windows, date command on macOS)
+- Simple JSON-RPC interface
+- Consistent ISO-style date formatting
+- Error handling with detailed error messages
 
 ## Installation
 
 ```bash
-npm install mcp-time
+npm install @dandeliongold/mcp-time
 ```
 
-## Usage
+## Usage with Claude Desktop
 
-Start the server:
+Add to your `claude_desktop_config.json`:
 
-```bash
-npm start
+```json
+{
+  "mcpServers": {
+    "time": {
+      "command": "npx",
+      "args": [
+        "@dandeliongold/mcp-time"
+      ]
+    }
+  }
+}
 ```
-
-The server will start on port 3200 by default.
 
 ## Development
 
@@ -31,7 +76,11 @@ The server will start on port 3200 by default.
    ```bash
    npm install
    ```
-3. Start development server
+3. Run tests
+   ```bash
+   npm test
+   ```
+4. Start development server
    ```bash
    npm run dev
    ```
