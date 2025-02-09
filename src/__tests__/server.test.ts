@@ -1,7 +1,7 @@
 // src/__tests__/server.test.ts
 
 // --- OVERRIDE GLOBAL DATE BEFORE IMPORTING ANY MODULES ---
-// Create a mutable variable that holds the “current time” (in milliseconds).
+// Create a mutable variable that holds the "current time" (in milliseconds).
 let CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
 const OriginalDate = Date;
 
@@ -411,6 +411,176 @@ describe("Time Server Protocol Integration", () => {
       const response = call[0] as any;
       expect(response).toHaveProperty("error");
       expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
+    });
+
+    // New test cases for negative time differences
+    it('should handle past timestamps and return negative minutes difference', async () => {
+      // Set the current time
+      CURRENT_TIME = new Date("2025-01-01T12:30:00.000Z").getTime();
+      const pastTimestamp = "2025-01-01 12:00:00"; // 30 minutes in the past
+
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 13,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: pastTimestamp,
+            interval: "minutes",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 13
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 13");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: -30,
+        interval: "minutes",
+        inputTimestamp: pastTimestamp,
+      });
+    });
+
+    it('should handle past timestamps and return negative seconds difference', async () => {
+      // Set the current time
+      CURRENT_TIME = new Date("2025-01-01T12:00:30.000Z").getTime();
+      const pastTimestamp = "2025-01-01 12:00:00"; // 30 seconds in the past
+
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 14,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: pastTimestamp,
+            interval: "seconds",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 14
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 14");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: -30,
+        interval: "seconds",
+        inputTimestamp: pastTimestamp,
+      });
+    });
+
+    // New test cases for zero time differences
+    it('should handle current timestamp and return zero minutes difference', async () => {
+      // Set the current time
+      CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
+      const currentTimestamp = "2025-01-01 12:00:00"; // Same as current time
+
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 15,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: currentTimestamp,
+            interval: "minutes",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 15
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 15");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: 0,
+        interval: "minutes",
+        inputTimestamp: currentTimestamp,
+      });
+    });
+
+    it('should handle current timestamp and return zero seconds difference', async () => {
+      // Set the current time
+      CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
+      const currentTimestamp = "2025-01-01 12:00:00"; // Same as current time
+
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 16,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: currentTimestamp,
+            interval: "seconds",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 16
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 16");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: 0,
+        interval: "seconds",
+        inputTimestamp: currentTimestamp,
+      });
     });
   });
 });
