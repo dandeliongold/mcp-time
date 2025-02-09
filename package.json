@@ -30,6 +30,6 @@
     "typescript": "^5.7.3"
   },
   "bin": {
-    "mcp-time": "dist/server.js"
+    "mcp-time": "dist/index.js"
   }
 }
