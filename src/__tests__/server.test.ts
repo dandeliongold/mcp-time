@@ -325,5 +325,92 @@ describe("Time Server Protocol Integration", () => {
       expect(response).toHaveProperty("error");
       expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
     });
+
+    it('should return an error for invalid interval value', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 8,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: "2025-01-01 12:00:00",
+            interval: "hours" // Invalid interval
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 8
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 8");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
+    });
+
+    it('should handle null arguments for getCurrentTime', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 11,
+        method: "tools/call",
+        params: {
+          name: "getCurrentTime",
+          arguments: null
+        }
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 11
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 11");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.InternalError);
+    });
+
+    it('should handle empty arguments object for getTimeDifference', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 12,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {}
+        }
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 12
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 12");
+      }
+      const response = call[0] as any;
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
+    });
   });
 });
