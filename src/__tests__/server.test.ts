@@ -1,4 +1,29 @@
 // src/__tests__/server.test.ts
+
+// --- OVERRIDE GLOBAL DATE BEFORE IMPORTING ANY MODULES ---
+// Create a mutable variable that holds the “current time” (in milliseconds).
+let CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
+const OriginalDate = Date;
+
+global.Date = class extends Date {
+  constructor(...args: any[]) {
+    if (args.length === 0) {
+      // When no arguments are provided, return the fixed time.
+      super(CURRENT_TIME);
+    } else if (args.length === 1) {
+      // With one argument, pass it along normally.
+      super(args[0]);
+    } else {
+      // If more arguments are provided, use Reflect.construct.
+      return Reflect.construct(OriginalDate, args);
+    }
+  }
+  static now() {
+    return CURRENT_TIME;
+  }
+} as any;
+
+// --- NOW IMPORT THE MODULES THAT USE Date ---
 import { jest } from '@jest/globals';
 import { createServer } from "../server"; // adjust this path
 import { ErrorCode } from "@modelcontextprotocol/sdk/types.js";
@@ -6,7 +31,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 /**
- * Helper to wait for pending promises to flush.
+ * Helper to wait for pending promises.
  */
 function flushPromises(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
@@ -16,7 +41,7 @@ function flushPromises(): Promise<void> {
  * Create a dummy transport that conforms to the Transport interface.
  */
 function createDummyTransport(): Transport {
-  const dummy: Transport = {
+  return {
     onclose: undefined,
     onerror: undefined,
     onmessage: undefined,
@@ -24,7 +49,6 @@ function createDummyTransport(): Transport {
     send: jest.fn(() => Promise.resolve()),
     close: jest.fn(() => Promise.resolve()),
   };
-  return dummy;
 }
 
 describe("Time Server Protocol Integration", () => {
@@ -33,8 +57,9 @@ describe("Time Server Protocol Integration", () => {
   let transport: Transport;
 
   beforeEach(async () => {
-    // createServer is assumed to return an object { server, cleanup }
-    const srv = createServer();
+    // Set a default current time for each test.
+    CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
+    const srv = createServer(); // Assumes createServer() returns an object { server, cleanup }
     server = srv.server;
     cleanup = srv.cleanup;
     transport = createDummyTransport();
@@ -43,8 +68,12 @@ describe("Time Server Protocol Integration", () => {
 
   afterEach(async () => {
     await cleanup();
-    jest.useRealTimers();
     (transport.send as jest.Mock).mockReset();
+  });
+
+  afterAll(() => {
+    // Restore the original Date constructor.
+    global.Date = OriginalDate;
   });
 
   describe("ListToolsRequest", () => {
@@ -62,7 +91,6 @@ describe("Time Server Protocol Integration", () => {
       }
       await flushPromises();
 
-      // Assert that a response was sent.
       const sendMock = transport.send as jest.Mock;
       expect(sendMock.mock.calls.length).toBeGreaterThan(0);
 
@@ -81,14 +109,16 @@ describe("Time Server Protocol Integration", () => {
       expect(response.result.tools.length).toBe(2);
 
       const toolNames = response.result.tools.map((t: any) => t.name);
-      expect(toolNames).toEqual(expect.arrayContaining(["getCurrentTime", "getTimeDifference"]));
+      expect(toolNames).toEqual(
+        expect.arrayContaining(["getCurrentTime", "getTimeDifference"])
+      );
     });
   });
 
   describe("CallToolRequest handler", () => {
     it('should return the current time in ISO format when calling "getCurrentTime"', async () => {
-      const fakeTime = new Date("2025-01-01T12:00:00.000Z");
-      jest.useFakeTimers({ now: fakeTime });
+      // Set the fixed time desired for this test.
+      CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
 
       const request = {
         jsonrpc: "2.0" as "2.0",
@@ -113,18 +143,18 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 2");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("result");
       expect(response.result).toHaveProperty("content");
 
       const content = response.result.content;
       expect(Array.isArray(content)).toBe(true);
-      expect(content[0]).toHaveProperty("text", fakeTime.toISOString());
+      // new Date() in the server will use our overridden Date and return CURRENT_TIME.
+      expect(content[0]).toHaveProperty("text", new Date(CURRENT_TIME).toISOString());
     });
 
     it('should calculate time difference in minutes when calling "getTimeDifference"', async () => {
-      const currentTime = new Date("2025-01-01T12:00:00.000Z");
-      jest.useFakeTimers({ now: currentTime });
+      // Set the current time for this test.
+      CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
       const futureTimestamp = "2025-01-01 12:30:00";
 
       const request = {
@@ -153,7 +183,6 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 3");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("result");
       expect(response.result).toHaveProperty("content");
       const content = response.result.content;
@@ -166,8 +195,8 @@ describe("Time Server Protocol Integration", () => {
     });
 
     it('should calculate time difference in seconds when calling "getTimeDifference"', async () => {
-      const currentTime = new Date("2025-01-01T12:00:00.000Z");
-      jest.useFakeTimers({ now: currentTime });
+      // Set the current time for this test.
+      CURRENT_TIME = new Date("2025-01-01T12:00:00.000Z").getTime();
       const futureTimestamp = "2025-01-01 12:00:30";
 
       const request = {
@@ -196,7 +225,6 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 4");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("result");
       expect(response.result).toHaveProperty("content");
       const content = response.result.content;
@@ -232,7 +260,6 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 5");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("error");
       expect(response.error).toHaveProperty("code", ErrorCode.MethodNotFound);
     });
@@ -264,7 +291,6 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 6");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("error");
       expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
     });
@@ -296,7 +322,6 @@ describe("Time Server Protocol Integration", () => {
         throw new Error("No send call found with id === 7");
       }
       const response = call[0] as any;
-
       expect(response).toHaveProperty("error");
       expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
     });
