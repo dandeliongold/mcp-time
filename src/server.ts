@@ -19,13 +19,23 @@ enum ToolName {
     GET_TIME_DIFFERENCE = "getTimeDifference"
 }
 
-const GetTimeArgsSchema = z.object({}).describe("No arguments needed");
+const GetTimeArgsSchema = z.object({}).describe(
+    `No arguments needed - returns current time in ISO format
+    Format: YYYY-MM-DDTHH:mm:ss.sssZ`
+);
 
 const GetTimeDiffArgsSchema = z.object({
-    timestamp: z.string().describe("ISO format timestamp (YYYY-MM-DD HH:mm:ss)"),
+    timestamp: z.string().describe(
+        `Input timestamp in format YYYY-MM-DD HH:mm:ss
+        Example: '2025-02-08 20:20:22'`
+    ),
     interval: z.enum(['minutes', 'seconds'])
         .default('minutes')
-        .describe("Time interval to return (minutes or seconds)")
+        .describe(
+            `Time interval for the difference calculation.
+            Returns positive values for future timestamps, negative for past.
+            Default: 'minutes'`
+        )
 });
 
 type ToolResult = {
@@ -61,12 +71,41 @@ export const createServer = () => {
         const tools: Tool[] = [
             {
                 name: ToolName.GET_CURRENT_TIME,
-                description: "Get current time in UTC",
+                description: `Get current time in UTC ISO format.
+            Returns a string in format YYYY-MM-DDTHH:mm:ss.sssZ.
+
+            Example response:
+            {
+                "type": "text",
+                "text": "2025-02-08T19:50:22.000Z"
+            }`,
                 inputSchema: zodToJsonSchema(GetTimeArgsSchema) as ToolInput,
             },
             {
                 name: ToolName.GET_TIME_DIFFERENCE,
-                description: "Calculate time difference between now and a given timestamp",
+                description: `Calculate time difference between a given timestamp and current time.
+                Returns positive values for future timestamps and negative for past timestamps.
+                Response includes the difference in requested interval (minutes/seconds),
+                input timestamp, and current time.
+
+                Example calls:
+                {
+                    "timestamp": "2025-02-08 20:20:22",
+                    "interval": "minutes"
+                }
+                or
+                {
+                    "interval": "seconds",
+                    "timestamp": "2025-02-08 20:20:22"
+                }
+
+                Example response:
+                {
+                    "difference": 30,
+                    "interval": "minutes",
+                    "inputTimestamp": "2025-02-08 20:20:22",
+                    "currentTime": "2025-02-08 19:50:22"
+                }`,
                 inputSchema: zodToJsonSchema(GetTimeDiffArgsSchema) as ToolInput,
             },
         ];
