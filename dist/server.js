@@ -1,61 +1,111 @@
-#!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, ErrorCode, McpError, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
-// Schema definition for getCurrentTime
-const GetTimeArgsSchema = z.object({});
-const server = new Server({
-    name: "time-server",
-    version: "0.1.0",
-}, {
-    capabilities: {
-        tools: {},
-    },
+const ToolInputSchema = ToolSchema.shape.inputSchema;
+/* Input schemas for tools implemented in this server */
+var ToolName;
+(function (ToolName) {
+    ToolName["GET_CURRENT_TIME"] = "getCurrentTime";
+    ToolName["GET_TIME_DIFFERENCE"] = "getTimeDifference";
+})(ToolName || (ToolName = {}));
+const GetTimeArgsSchema = z.object({}).describe("No arguments needed");
+const GetTimeDiffArgsSchema = z.object({
+    timestamp: z.string().describe("ISO format timestamp (YYYY-MM-DD HH:mm:ss)"),
+    interval: z.enum(['minutes', 'seconds'])
+        .default('minutes')
+        .describe("Time interval to return (minutes or seconds)")
 });
-// Tool handlers
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-        tools: [
+export const createServer = () => {
+    const server = new Server({
+        name: "time-server",
+        version: "0.1.0",
+    }, {
+        capabilities: {
+            tools: {},
+        },
+    });
+    let cleanupHandlers = [];
+    let testTimestamp;
+    const getCurrentTime = () => {
+        if (testTimestamp) {
+            return new Date(testTimestamp);
+        }
+        return new Date();
+    };
+    // Tool handlers
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+        const tools = [
             {
-                name: "getCurrentTime",
+                name: ToolName.GET_CURRENT_TIME,
                 description: "Get current time in UTC",
                 inputSchema: zodToJsonSchema(GetTimeArgsSchema),
             },
-        ],
-    };
-});
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    try {
-        const { name } = request.params;
-        if (name === "getCurrentTime") {
-            const time = new Date().toISOString();
-            return {
-                content: [{
-                        type: "text",
-                        text: time
-                    }],
-                isError: false,
-            };
+            {
+                name: ToolName.GET_TIME_DIFFERENCE,
+                description: "Calculate time difference between now and a given timestamp",
+                inputSchema: zodToJsonSchema(GetTimeDiffArgsSchema),
+            },
+        ];
+        return { tools };
+    });
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+        const { name, arguments: args } = request.params;
+        try {
+            if (name === ToolName.GET_CURRENT_TIME) {
+                GetTimeArgsSchema.parse(args);
+                const time = getCurrentTime().toISOString();
+                return {
+                    content: [{
+                            type: "text",
+                            text: time
+                        }]
+                };
+            }
+            if (name === ToolName.GET_TIME_DIFFERENCE) {
+                const validatedArgs = GetTimeDiffArgsSchema.parse(args);
+                // Parse input timestamp and ensure UTC
+                const inputDate = new Date(validatedArgs.timestamp.replace(' ', 'T') + 'Z');
+                if (isNaN(inputDate.getTime())) {
+                    throw new McpError(ErrorCode.InvalidParams, 'Invalid timestamp format');
+                }
+                // Get current time in UTC
+                const currentDate = getCurrentTime();
+                // Calculate difference in milliseconds
+                const diffMs = inputDate.getTime() - currentDate.getTime();
+                // Convert to requested interval
+                const difference = validatedArgs.interval === 'seconds'
+                    ? Math.floor(diffMs / 1000)
+                    : Math.floor(diffMs / (1000 * 60));
+                const response = {
+                    difference,
+                    interval: validatedArgs.interval,
+                    inputTimestamp: validatedArgs.timestamp,
+                    currentTime: currentDate.toISOString().replace('T', ' ').slice(0, 19)
+                };
+                return {
+                    content: [{
+                            type: "text",
+                            text: JSON.stringify(response, null, 2)
+                        }]
+                };
+            }
+            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
-        throw new Error(`Unknown tool: ${name}`);
-    }
-    catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        return {
-            content: [{ type: "text", text: `Error: ${errorMessage}` }],
-            isError: true,
-        };
-    }
-});
-// Start server
-async function runServer() {
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    console.error("Time server running on stdio");
-}
-runServer().catch((error) => {
-    console.error("Fatal error running server:", error);
-    process.exit(1);
-});
+        catch (error) {
+            if (error instanceof McpError) {
+                throw error;
+            }
+            // Handle Zod validation errors
+            if (error instanceof z.ZodError) {
+                throw new McpError(ErrorCode.InvalidParams, error.errors[0].message);
+            }
+            throw new McpError(ErrorCode.InternalError, error instanceof Error ? error.message : String(error));
+        }
+    });
+    const cleanup = async () => {
+        await Promise.all(cleanupHandlers.map(handler => handler()));
+        cleanupHandlers = [];
+    };
+    return { server, cleanup };
+};
