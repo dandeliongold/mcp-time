@@ -48,7 +48,7 @@ type ToolResult = {
 export const createServer = () => {
     const server = new Server({
         name: "time-server",
-        version: "0.1.0",
+        version: "1.2.2",
     }, {
         capabilities: {
             tools: {},
