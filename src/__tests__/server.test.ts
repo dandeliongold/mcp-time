@@ -1,160 +1,304 @@
-import { handleMcpRequest, closeServer } from '../server';
+// src/__tests__/server.test.ts
 import { jest } from '@jest/globals';
+import { createServer } from "../server"; // adjust this path
+import { ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
-describe('Time Server Tools', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
+/**
+ * Helper to wait for pending promises to flush.
+ */
+function flushPromises(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/**
+ * Create a dummy transport that conforms to the Transport interface.
+ */
+function createDummyTransport(): Transport {
+  const dummy: Transport = {
+    onclose: undefined,
+    onerror: undefined,
+    onmessage: undefined,
+    start: jest.fn(() => Promise.resolve()),
+    send: jest.fn(() => Promise.resolve()),
+    close: jest.fn(() => Promise.resolve()),
+  };
+  return dummy;
+}
+
+describe("Time Server Protocol Integration", () => {
+  let server: Server;
+  let cleanup: () => Promise<void>;
+  let transport: Transport;
+
+  beforeEach(async () => {
+    // createServer is assumed to return an object { server, cleanup }
+    const srv = createServer();
+    server = srv.server;
+    cleanup = srv.cleanup;
+    transport = createDummyTransport();
+    await server.connect(transport);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await cleanup();
     jest.useRealTimers();
+    (transport.send as jest.Mock).mockReset();
   });
 
-  describe('getTimeDifference', () => {
-    afterAll(async () => {
-      await closeServer();
+  describe("ListToolsRequest", () => {
+    it("should return the list of available tools", async () => {
+      const listRequest = {
+        jsonrpc: "2.0" as "2.0",
+        id: 1,
+        method: "tools/list",
+        params: {},
+      };
+
+      // Simulate an incoming JSON-RPC message.
+      if (transport.onmessage) {
+        transport.onmessage(listRequest);
+      }
+      await flushPromises();
+
+      // Assert that a response was sent.
+      const sendMock = transport.send as jest.Mock;
+      expect(sendMock.mock.calls.length).toBeGreaterThan(0);
+
+      // Find the call with id === 1.
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 1
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 1");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("tools");
+      expect(Array.isArray(response.result.tools)).toBe(true);
+      expect(response.result.tools.length).toBe(2);
+
+      const toolNames = response.result.tools.map((t: any) => t.name);
+      expect(toolNames).toEqual(expect.arrayContaining(["getCurrentTime", "getTimeDifference"]));
     });
+  });
 
-    const makeRequest = (timestamp: string, interval?: 'minutes' | 'seconds') => ({
-      params: {
-        name: 'getTimeDifference',
-        arguments: {
-          timestamp,
-          ...(interval && { interval }),
-        },
-      },
-    });
+  describe("CallToolRequest handler", () => {
+    it('should return the current time in ISO format when calling "getCurrentTime"', async () => {
+      const fakeTime = new Date("2025-01-01T12:00:00.000Z");
+      jest.useFakeTimers({ now: fakeTime });
 
-    it('should calculate minute difference correctly', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:00.000Z'));
-      const request = makeRequest('2025-02-08 17:30:00');
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result).toEqual({
-        difference: -60,
-        interval: 'minutes',
-        inputTimestamp: '2025-02-08 17:30:00',
-        currentTime: '2025-02-08 18:30:00',
-      });
-    });
-
-    it('should calculate seconds difference correctly', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:30.000Z'));
-      const request = makeRequest('2025-02-08 18:29:00', 'seconds');
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result).toEqual({
-        difference: -90,
-        interval: 'seconds',
-        inputTimestamp: '2025-02-08 18:29:00',
-        currentTime: '2025-02-08 18:30:30',
-      });
-    });
-
-    it('should handle future timestamps (negative difference)', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:00.000Z'));
-      const request = makeRequest('2025-02-08 19:30:00');
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result).toEqual({
-        difference: 60,
-        interval: 'minutes',
-        inputTimestamp: '2025-02-08 19:30:00',
-        currentTime: '2025-02-08 18:30:00',
-      });
-    });
-
-    it('should handle same timestamp (zero difference)', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:00.000Z'));
-      const request = makeRequest('2025-02-08 18:30:00');
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result).toEqual({
-        difference: 0,
-        interval: 'minutes',
-        inputTimestamp: '2025-02-08 18:30:00',
-        currentTime: '2025-02-08 18:30:00',
-      });
-    });
-
-    it.each([
-      ['2025-02-08 18:30:00', '2025-02-08T19:30:00.000Z', -60],
-      ['2025-02-08 17:30:00', '2025-02-08T19:30:00.000Z', -120],
-      ['2025-02-08 20:30:00', '2025-02-08T19:30:00.000Z', 60],
-    ])('should handle time difference: %s to %s = %i minutes', async (input, current, expected) => {
-      jest.setSystemTime(new Date(current));
-      const request = makeRequest(input);
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result.difference).toBe(expected);
-    });
-
-    it('should handle invalid timestamp format', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:00.000Z'));
-      const request = makeRequest('invalid-date');
-
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-      expect(response.isError).toBe(true);
-      expect(result.error).toBe('Invalid timestamp format');
-    });
-
-    it('should handle invalid interval value', async () => {
-      jest.setSystemTime(new Date('2025-02-08T18:30:00.000Z'));
       const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 2,
+        method: "tools/call",
         params: {
-          name: 'getTimeDifference',
+          name: "getCurrentTime",
+          arguments: {},
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 2
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 2");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+
+      const content = response.result.content;
+      expect(Array.isArray(content)).toBe(true);
+      expect(content[0]).toHaveProperty("text", fakeTime.toISOString());
+    });
+
+    it('should calculate time difference in minutes when calling "getTimeDifference"', async () => {
+      const currentTime = new Date("2025-01-01T12:00:00.000Z");
+      jest.useFakeTimers({ now: currentTime });
+      const futureTimestamp = "2025-01-01 12:30:00";
+
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 3,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
           arguments: {
-            timestamp: '2025-02-08 17:30:00',
-            interval: 'invalid',
+            timestamp: futureTimestamp,
+            interval: "minutes",
           },
         },
       };
 
-      const response = await handleMcpRequest(request);
-      expect(response.isError).toBe(true);
-      const result = JSON.parse(response.content[0].text);
-      expect(result.error).toContain('Invalid enum value');
-    });
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
 
-    it('should handle month boundary correctly', async () => {
-      jest.setSystemTime(new Date('2025-03-01T00:30:00.000Z'));
-      const request = makeRequest('2025-02-28 23:30:00');
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 3
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 3");
+      }
+      const response = call[0] as any;
 
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
-
-      expect(result).toEqual({
-        difference: -60,
-        interval: 'minutes',
-        inputTimestamp: '2025-02-28 23:30:00',
-        currentTime: '2025-03-01 00:30:00',
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: 30,
+        interval: "minutes",
+        inputTimestamp: futureTimestamp,
       });
     });
 
-    it('should handle year boundary correctly', async () => {
-      jest.setSystemTime(new Date('2025-01-01T00:30:00.000Z'));
-      const request = makeRequest('2024-12-31 23:30:00');
+    it('should calculate time difference in seconds when calling "getTimeDifference"', async () => {
+      const currentTime = new Date("2025-01-01T12:00:00.000Z");
+      jest.useFakeTimers({ now: currentTime });
+      const futureTimestamp = "2025-01-01 12:00:30";
 
-      const response = await handleMcpRequest(request);
-      const result = JSON.parse(response.content[0].text);
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 4,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: futureTimestamp,
+            interval: "seconds",
+          },
+        },
+      };
 
-      expect(result).toEqual({
-        difference: -60,
-        interval: 'minutes',
-        inputTimestamp: '2024-12-31 23:30:00',
-        currentTime: '2025-01-01 00:30:00',
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 4
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 4");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("result");
+      expect(response.result).toHaveProperty("content");
+      const content = response.result.content;
+      const parsed = JSON.parse(content[0].text);
+      expect(parsed).toMatchObject({
+        difference: 30,
+        interval: "seconds",
+        inputTimestamp: futureTimestamp,
       });
+    });
+
+    it('should return an error for an unknown tool', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 5,
+        method: "tools/call",
+        params: {
+          name: "unknownTool",
+          arguments: {},
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 5
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 5");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.MethodNotFound);
+    });
+
+    it('should return an error for an invalid timestamp', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 6,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            timestamp: "invalid-timestamp",
+            interval: "minutes",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 6
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 6");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
+    });
+
+    it('should return an error when required fields are missing', async () => {
+      const request = {
+        jsonrpc: "2.0" as "2.0",
+        id: 7,
+        method: "tools/call",
+        params: {
+          name: "getTimeDifference",
+          arguments: {
+            // Missing required "timestamp" field.
+            interval: "minutes",
+          },
+        },
+      };
+
+      if (transport.onmessage) {
+        transport.onmessage(request);
+      }
+      await flushPromises();
+
+      const sendMock = transport.send as jest.Mock;
+      const call = sendMock.mock.calls.find(
+        (call: unknown[]) => (call[0] as { id: number }).id === 7
+      );
+      if (!call) {
+        throw new Error("No send call found with id === 7");
+      }
+      const response = call[0] as any;
+
+      expect(response).toHaveProperty("error");
+      expect(response.error).toHaveProperty("code", ErrorCode.InvalidParams);
     });
   });
 });

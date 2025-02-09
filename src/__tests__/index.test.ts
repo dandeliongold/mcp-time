@@ -1,4 +1,4 @@
-import { getFormattedTime, handleJsonRpcMessage, JsonRpcRequest } from '../index';
+import { getFormattedTime, handleJsonRpcMessage, JsonRpcRequest } from '../json-rpc';
 
 function mockDate(isoString: string): void {
   const fixedDate = new Date(isoString);

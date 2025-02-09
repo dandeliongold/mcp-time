@@ -1,111 +1,46 @@
 #!/usr/bin/env node
 
-export interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  id: number | string | null;
-  method: string;
-  params?: any;
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createServer } from "./server.js";
+
+let transport: StdioServerTransport;
+
+async function runServer() {
+    const { server } = createServer();
+    transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Time server running on stdio");
 }
 
-interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  id: number | string | null;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-    data?: any;
-  };
-}
-
-interface TimeResponse {
-  time: string;
-  success: boolean;
-}
-
-export function getFormattedTime(): string {
-  const now = new Date();
-  return now.toISOString()
-    .replace('T', ' ')      // Replace T with space
-    .slice(0, 19);          // Get only YYYY-MM-DD HH:mm:ss part
-}
-
-export function handleJsonRpcMessage(message: JsonRpcRequest): JsonRpcResponse {
-  if (message.method === 'getCurrentTime') {
-    try {
-      const time = getFormattedTime();
-      return {
-        jsonrpc: '2.0',
-        id: message.id,
-        result: {
-          time: time,
-          success: true
-        }
-      };
-    } catch (error) {
-      return {
-        jsonrpc: '2.0',
-        id: message.id,
-        error: {
-          code: -32603,
-          message: 'Failed to get current time',
-          data: error instanceof Error ? error.message : String(error)
-        }
-      };
+async function closeServer() {
+    if (transport) {
+        await transport.close();
+        console.error("Time server stopped");
     }
-  }
-
-  return {
-    jsonrpc: '2.0',
-    id: message.id,
-    error: {
-      code: -32601,
-      message: 'Method not found'
-    }
-  };
 }
 
-// Only set up server if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
-  process.stdin.setEncoding('utf-8');
-  let buffer = '';
-
-  process.stdin.on('data', async (chunk: string) => {
-    buffer += chunk;
-    
-    const messages = buffer.split('\n');
-    buffer = messages.pop() || '';
-
-    for (const message of messages) {
-      try {
-        const request: JsonRpcRequest = JSON.parse(message);
-        const response = await handleJsonRpcMessage(request);
-        console.log(JSON.stringify(response));
-      } catch (error) {
-        console.log(JSON.stringify({
-          jsonrpc: '2.0',
-          id: null,
-          error: {
-            code: -32700,
-            message: 'Parse error',
-            data: error instanceof Error ? error.message : String(error)
-          }
-        }));
-      }
-    }
-  });
-
-  process.stdin.on('end', () => {
+// Handle cleanup on exit
+process.on("SIGINT", async () => {
+    await closeServer();
     process.exit(0);
-  });
+});
 
-  process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
+// Handle uncaught errors
+process.on("uncaughtException", async (error) => {
+    console.error("Uncaught exception:", error);
+    await closeServer();
     process.exit(1);
-  });
+});
 
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on("unhandledRejection", async (reason) => {
+    console.error("Unhandled rejection:", reason);
+    await closeServer();
     process.exit(1);
-  });
-}
+});
+
+// Start server
+runServer().catch(async (error) => {
+    console.error("Fatal error running server:", error);
+    await closeServer();
+    process.exit(1);
+});
