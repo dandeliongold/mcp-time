@@ -9,7 +9,7 @@ async function runServer() {
     const { server } = createServer();
     transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Time server running on stdio");
+    console.info("Time server running on stdio");
 }
 
 async function closeServer() {
